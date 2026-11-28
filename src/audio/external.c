@@ -159,7 +159,7 @@ u8 audioString118__[] = "";
  * effects from the same bank play at once. If the sequence is NOT modified (channels 10..15 do not exist) everything works as before.
  * Mario (banks 0 actions, 1 movement, 2 voice) and the menu (7) are left with 1 channel: their sounds cut each other off on purpose. */
 #ifndef PSP_SFX_EXTRA
-#if defined(TARGET_PSP) && !defined(VERSION_EU)
+#ifdef TARGET_PSP
 #define PSP_SFX_EXTRA 1
 #else
 #define PSP_SFX_EXTRA 0

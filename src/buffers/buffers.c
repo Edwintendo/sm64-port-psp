@@ -6,10 +6,14 @@
 #ifndef NO_SEGMENTED_MEMORY
 ALIGNED8 u8 gDecompressionHeap[0xD000]; /* (MIO0 textures: the port has no segments, so it is not used) */
 #endif
+/* The audio heap is written by the Media Engine (the audio runs there): 64-byte aligned and a whole number of 64-byte cache lines, so no
+ * cache line is shared with other data (see tools/psp/me_linkfile.py). */
+#define AUDIO_HEAP_ALIGN64(size) (((size) + 63) & ~63)
 #if defined(VERSION_EU) || defined(VERSION_SH)
-ALIGNED16 u8 gAudioHeap[DOUBLE_SIZE_ON_64_BIT(0x31200) - 0x3800 + PSP_AUDIO_LUIGI_BANK_MEM + PSP_AUDIO_LUIGI_SEQ_MEM + PSP_AUDIO_INIT_EXTRA];
+u8 gAudioHeap[AUDIO_HEAP_ALIGN64(DOUBLE_SIZE_ON_64_BIT(0x31200) - 0x3800 + PSP_AUDIO_LUIGI_BANK_MEM + PSP_AUDIO_LUIGI_SEQ_MEM + PSP_AUDIO_INIT_EXTRA)]
+    __attribute__((aligned(64)));
 #else
-ALIGNED16 u8 gAudioHeap[DOUBLE_SIZE_ON_64_BIT(0x31200 + PSP_AUDIO_HEAP_EXTRA + PSP_AUDIO_INIT_EXTRA)];
+u8 gAudioHeap[AUDIO_HEAP_ALIGN64(DOUBLE_SIZE_ON_64_BIT(0x31200 + PSP_AUDIO_HEAP_EXTRA + PSP_AUDIO_INIT_EXTRA))] __attribute__((aligned(64)));
 #endif
 
 ALIGNED8 u8 gIdleThreadStack[0x800];

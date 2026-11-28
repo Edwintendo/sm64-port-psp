@@ -26,6 +26,15 @@ PORT_VERSION_XYZ := $(shell echo '$(PORT_VERSION)' | sed 's/[-+].*//')
 SFO_VERSION = $(shell echo '$(PORT_VERSION_XYZ)' | awk -F. '{m=$$2>9?9:$$2;p=$$3>9?9:$$3;printf "$(1)",$$1,m,p}')
 SFOFLAGS := -s APP_VER=$(call SFO_VERSION,%02d.%d%d) -s DISC_VERSION=$(call SFO_VERSION,%d.%d%d)
 
+# PSP_GO_PAUSE=1 (experimental): a PARAM.SFO without MEMSIZE=1, so the game runs in the normal 24 MB and the PSP Go can use its
+# "Pause Game" (the Go keeps the paused game in the extra memory that MEMSIZE=1 would give to the game). Built in its own folder.
+ifeq ($(PSP_GO_PAUSE),1)
+  OUT := $(TOP)/build/$(VERSION)_psp/installer_go_pause
+  SFO_MEMSIZE :=
+else
+  SFO_MEMSIZE := -d MEMSIZE=1
+endif
+
 SRC := $(TOP)/psp/installer
 CFLAGS := -O2 -G0 -Wall -DSMI_PSP_IO -D_PSP_FW_VERSION=500 -I$(SRC) -I$(PSPSDK_PREFIX)/include -I$(PSP_PREFIX)/include
 
@@ -44,7 +53,7 @@ $(OUT)/installer.prx: $(OUT)/installer.elf
 
 # (also remade when the main Makefile changes: that is where the version is)
 $(OUT)/EBOOT.PBP: $(OUT)/installer.prx $(TOP)/Makefile
-	mksfoex -d MEMSIZE=1 $(SFOFLAGS) $(TITLE) $(OUT)/PARAM.SFO
+	mksfoex $(SFO_MEMSIZE) $(SFOFLAGS) $(TITLE) $(OUT)/PARAM.SFO
 	python3 $(TOP)/tools/psp/sort_sfo.py $(OUT)/PARAM.SFO # keys in alphabetical order, as in Sony's (see the script)
 	pack-pbp $@ $(OUT)/PARAM.SFO $(EBOOT_DIR)/ICON0.png NULL NULL $(EBOOT_DIR)/PIC0.png $(EBOOT_DIR)/SND0.at3 $< NULL
 

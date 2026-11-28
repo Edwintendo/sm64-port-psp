@@ -549,7 +549,8 @@ ifeq ($(TARGET_PSP),1)
     PLATFORM_CFLAGS  += -pg
     PLATFORM_LDFLAGS += -pg
   else
-    PLATFORM_LDFLAGS += -specs=$(PSPSDK_PREFIX)/lib/prxspecs -Wl,-q,-T$(PSPSDK_PREFIX)/lib/linkfile.prx $(PSPSDK_PREFIX)/lib/prxexports.o
+    # linkfile.prx with the Media Engine's data kept apart in the cache (tools/psp/me_linkfile.py)
+    PLATFORM_LDFLAGS += -specs=$(PSPSDK_PREFIX)/lib/prxspecs -Wl,-q,-T$(BUILD_DIR)/linkfile_me.prx $(PSPSDK_PREFIX)/lib/prxexports.o
   endif
 endif
 ifeq ($(TARGET_WEB),1)
@@ -984,9 +985,17 @@ $(BUILD_DIR)/$(TARGET).objdump: $(ELF)
 	$(OBJDUMP) -D $< > $@
 
 else
+ifeq ($(TARGET_PSP),1)
+ifneq ($(PROFILE_PSP),1)
+$(BUILD_DIR)/linkfile_me.prx: $(PSPSDK_PREFIX)/lib/linkfile.prx tools/psp/me_linkfile.py
+	$(PYTHON) tools/psp/me_linkfile.py make $< $@
+$(EXE): $(BUILD_DIR)/linkfile_me.prx
+endif
+endif
 $(EXE): $(O_FILES) $(MIO0_FILES:.mio0=.o) $(SOUND_OBJ_FILES) $(ULTRA_O_FILES) $(GODDARD_O_FILES)
 	$(LD) -L $(BUILD_DIR) -o $@ $(O_FILES) $(SOUND_OBJ_FILES) $(ULTRA_O_FILES) $(GODDARD_O_FILES) $(LDFLAGS)
 ifeq ($(TARGET_PSP),1)
+	@if [ "$(PROFILE_PSP)" != "1" ]; then $(PYTHON) tools/psp/me_linkfile.py check $@; fi
 	psp-fixup-imports $@
 	@if [ "$(PROFILE_PSP)" != "1" ]; then \
 		psp-prxgen $@ $@.prx; \
@@ -995,7 +1004,7 @@ ifeq ($(TARGET_PSP),1)
 # The port's version, shown by the XMB (Triangle > Information) for the EBOOT: change it here for each release (`make ... PORT_VERSION=x.y.z`
 # overrides it). It goes into PARAM.SFO as APP_VER "0X.YZ" and DISC_VERSION "X.YZ": the XMB has two digits after the point (minor and patch,
 # 9 at most each), so 1.2.0 shows as 01.20. (Not VERSION: that one is the game's region, us/jp/eu/sh.)
-PORT_VERSION ?= 1.3.0
+PORT_VERSION ?= 1.3.1
 PORT_VERSION_XYZ := $(shell echo '$(PORT_VERSION)' | sed 's/[-+].*//')
 SFO_VERSION = $(shell echo '$(PORT_VERSION_XYZ)' | awk -F. '{m=$$2>9?9:$$2;p=$$3>9?9:$$3;printf "$(1)",$$1,m,p}')
 SFOFLAGS := -s APP_VER=$(call SFO_VERSION,%02d.%d%d) -s DISC_VERSION=$(call SFO_VERSION,%d.%d%d)
@@ -1077,7 +1086,7 @@ $(BUILD_DIR)/src/pc/psp_watchdog.o: $(CRASHLOG_DIR)/crashlog_prx.inc
 
 pbp: $(EXE)
 	@mkdir -p $(BUILD_DIR)/mario64
-	mksfoex -d MEMSIZE=1 $(SFOFLAGS) $(TITLE) $(BUILD_DIR)/PARAM.SFO
+	mksfoex $(if $(filter 1,$(PSP_GO_PAUSE)),,-d MEMSIZE=1) $(SFOFLAGS) $(TITLE) $(BUILD_DIR)/PARAM.SFO
 	$(PYTHON) tools/psp/sort_sfo.py $(BUILD_DIR)/PARAM.SFO # keys in alphabetical order, as in Sony's (see the script)
 	@if [ "$(PROFILE_PSP)" = "1" ]; then \
 		pack-pbp $(BUILD_DIR)/mario64/EBOOT.PBP $(BUILD_DIR)/PARAM.SFO $(EBOOT_DIR)/ICON0.png NULL NULL $(EBOOT_DIR)/PIC0.png $(EBOOT_DIR)/SND0.at3 $(EXE) NULL; \

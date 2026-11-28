@@ -28,7 +28,22 @@
 // N.B. sound banks are different from the audio banks referred to in other
 // files. We should really fix our naming to be less ambiguous...
 #define MAX_BACKGROUND_MUSIC_QUEUE_SIZE 6
+/* Extra channels of the sound effects player (PSP_SFX_EXTRA), the same as in src/audio/external.c: the modified effects sequence
+ * (sound/sequences/00_sound_player.s, also built for Shindou) gives some banks a 2nd channel in channels 10..15, so two of their sounds
+ * play at once. Above all, in multiplayer the other player's voice gets its own channel and the two players' voices no longer cut
+ * each other off. If the sequence has no channels 10..15 everything works as on the N64. */
+#ifndef PSP_SFX_EXTRA
+#ifdef TARGET_PSP
+#define PSP_SFX_EXTRA 1
+#else
+#define PSP_SFX_EXTRA 0
+#endif
+#endif
+#if PSP_SFX_EXTRA
+#define MAX_CHANNELS_PER_SOUND_BANK 2
+#else
 #define MAX_CHANNELS_PER_SOUND_BANK 1
+#endif
 
 #define SEQUENCE_NONE 0xFF
 
@@ -1157,6 +1172,24 @@ static void select_current_sounds(u8 bank) {
             // If more than sMaxChannelsForSoundBank[bank] sounds are live, then the
             // sound with lowest priority will be removed from the arrays.
             // In practice sMaxChannelsForSoundBank is always 1, so this code is overly general.
+#if PSP_SFX_EXTRA
+            if (bank == SOUND_BANK_VOICE && sMaxChannelsForSoundBank[bank] == 2) {
+                /* voices: slot 0 = this player's best line, slot 1 = the other player's best line */
+                i = (sPspRemoteVoicePos != NULL && sSoundBanks[bank][soundIndex].x == sPspRemoteVoicePos) ? 1 : 0;
+                if (liveSoundPriorities[i] >= sSoundBanks[bank][soundIndex].priority) {
+                    liveSoundPriorities[i] = sSoundBanks[bank][soundIndex].priority;
+                    liveSoundIndices[i] = soundIndex;
+                    liveSoundStatuses[i] = sSoundBanks[bank][soundIndex].soundStatus;
+                }
+            } else if (bank == 6 && sMaxChannelsForSoundBank[bank] == 2 && sCurrentSound[SOUND_BANK_VOICE][1] != 0xff) {
+                /* the other player's voice is using the shared channel: bank 6 is back to one sound until it ends */
+                if (liveSoundPriorities[0] >= sSoundBanks[bank][soundIndex].priority) {
+                    liveSoundPriorities[0] = sSoundBanks[bank][soundIndex].priority;
+                    liveSoundIndices[0] = soundIndex;
+                    liveSoundStatuses[0] = sSoundBanks[bank][soundIndex].soundStatus;
+                }
+            } else
+#endif
             for (i = 0; i < sMaxChannelsForSoundBank[bank]; i++) {
                 // If the correct position is found
                 if (liveSoundPriorities[i] >= sSoundBanks[bank][soundIndex].priority) {
@@ -1457,6 +1490,36 @@ void audio_signal_game_loop_tick(void) {
     noop_8031EEC8();
 }
 
+#if PSP_SFX_EXTRA
+/* Sequence channel for the 2nd sound of each bank (0xff = the bank has no 2nd channel), as in src/audio/external.c. Bank 2 (voice)
+ * uses its 2nd channel ONLY for the other player's voice; it shares channel 13 with the 2nd sound of bank 6 (.channel_psp_shared in
+ * the sequence), which gives it up while that voice sounds. Mario's actions (0), movement (1) and the menu (7) keep one channel. */
+#define PSP_SFX_SHARED_CHANNEL 13
+static const u8 sPspSfxExtraChannel[SOUND_BANK_COUNT] = { 0xff, 0xff, PSP_SFX_SHARED_CHANNEL, 10, 11, 12, PSP_SFX_SHARED_CHANNEL, 0xff, 14, 15 };
+static u8 sPspSfxExtraOk = 0;
+
+/* Enables the 2nd channel of the sPspSfxExtraChannel banks only if the loaded effects sequence has channels 10..15. */
+static void psp_sfx_update_limits(void) {
+    u8 ok = 1;
+    u8 b, k;
+    for (b = 0; b < SOUND_BANK_COUNT; b++) {
+        if (sPspSfxExtraChannel[b] != 0xff
+            && gSequencePlayers[SEQ_PLAYER_SFX].channels[sPspSfxExtraChannel[b]] == &gSequenceChannelNone) {
+            ok = 0;
+        }
+    }
+    if (ok != sPspSfxExtraOk) {
+        sPspSfxExtraOk = ok;
+        for (b = 0; b < SOUND_BANK_COUNT; b++) {
+            for (k = 1; k < MAX_CHANNELS_PER_SOUND_BANK; k++) {
+                sCurrentSound[b][k] = 0xff;
+            }
+            sMaxChannelsForSoundBank[b] = (ok && sPspSfxExtraChannel[b] != 0xff) ? 2 : 1;
+        }
+    }
+}
+#endif
+
 /**
  * Called from threads: thread4_sound, thread5_game_loop (EU and SH only)
  */
@@ -1477,11 +1540,21 @@ static void update_game_sound(void) {
     if (gSequencePlayers[SEQ_PLAYER_SFX].channels[0] == &gSequenceChannelNone) {
         return;
     }
+#if PSP_SFX_EXTRA
+    psp_sfx_update_limits();
+#endif
 
     for (bank = 0; bank < SOUND_BANK_COUNT; bank++) {
         select_current_sounds(bank);
 
         for (i = 0; i < MAX_CHANNELS_PER_SOUND_BANK; i++) {
+#if PSP_SFX_EXTRA
+            /* sequence channel: the bank's 1st sound goes on the "bank" channel, the 2nd on its extra channel */
+            channelIndex = (i == 0) ? bank : sPspSfxExtraChannel[bank];
+            if (channelIndex == 0xff) {
+                continue;
+            }
+#endif
             soundIndex = sCurrentSound[bank][i];
 
             if (soundIndex < 0xff
@@ -1504,6 +1577,11 @@ static void update_game_sound(void) {
                     // Begin playing the sound
                     gSequencePlayers[SEQ_PLAYER_SFX].channels[channelIndex]->soundScriptIO[4] = soundId;
                     gSequencePlayers[SEQ_PLAYER_SFX].channels[channelIndex]->soundScriptIO[0] = 1;
+#if PSP_SFX_EXTRA
+                    if (channelIndex == PSP_SFX_SHARED_CHANNEL) { /* the shared channel plays bank 6 (0) or the other player's voice (1) */
+                        gSequencePlayers[SEQ_PLAYER_SFX].channels[channelIndex]->soundScriptIO[6] = (bank == SOUND_BANK_VOICE) ? 1 : 0;
+                    }
+#endif
 
                     switch (bank) {
                         case SOUND_BANK_MOVING:
@@ -1830,14 +1908,18 @@ static void update_game_sound(void) {
                 }
             }
 
+#if !PSP_SFX_EXTRA
             // Increment to the next channel that this bank owns
             channelIndex++;
+#endif
         }
 
+#if !PSP_SFX_EXTRA
         // Increment to the first channel index of the next bank
         // (In practice sUsedChannelsForSoundBank[i] = sMaxChannelsForSoundBank[i] = 1, so this
         // doesn't do anything)
         channelIndex += sMaxChannelsForSoundBank[bank] - sUsedChannelsForSoundBank[bank];
+#endif
     }
 }
 
@@ -2737,6 +2819,11 @@ void func_803210D4(u16 fadeDuration) {
     for (i = 0; i < SOUND_BANK_COUNT; i++) {
         if (i != SOUND_BANK_MENU && !(i == SOUND_BANK_VOICE && gPspKeepVoiceOnFade)) {
             fade_channel_volume_scale(SEQ_PLAYER_SFX, i, 0, fadeDuration / 16);
+#if PSP_SFX_EXTRA
+            if (sPspSfxExtraChannel[i] != 0xff) {
+                fade_channel_volume_scale(SEQ_PLAYER_SFX, sPspSfxExtraChannel[i], 0, fadeDuration / 16);
+            }
+#endif
         }
     }
 

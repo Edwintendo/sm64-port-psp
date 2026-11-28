@@ -189,6 +189,7 @@ PCにインストールするのはDocker Desktopだけです。それ以外(コ
 
 > ホームブリューを実行するには **カスタムファームウェア**(ARK-4、PRO、MEなど)が必要です。この移植は **ARK-4・333 MHz** のPSPで開発・テストしました。
 > **PSP go** の場合は、本体メモリの `PSP\GAME` フォルダにコピーしてください。
+> **PSP goの「ゲームを一時停止」(実験的):** このゲームは通常、PSP-2000 / 3000 / goの追加メモリ(`MEMSIZE=1`)を使いますが、goは一時停止中のゲームを保存するためにそのメモリを必要とするため、この機能は使えません。`PSP_GO_PAUSE=1` でビルド(`make TARGET_PSP=1 pbp PSP_GO_PAUSE=1`)すると追加メモリを使わず、PSP-1000と同じ通常の24MBで動作します。リリースには `PSP_GO_PAUSE_EXPERIMENTAL` フォルダにこのEBOOTが入っています。インストール後、`PSP\GAME\SM64_<VERSION>\` の `EBOOT.PBP` に上書きコピーしてください。実機のPSP goでは未テストです。問題があれば通常の `EBOOT.PBP` に戻してください。
 
 ### PCなしでリリースからインストールする
 
@@ -375,7 +376,7 @@ make TARGET_PSP=1 VERSION=us pbp        # build/us_psp/mario64/{EBOOT.PBP,SM64.P
 - **Hayden Kowalchuk(HaydenKow)** — 最初のPSP移植(2020年)。Gitの履歴上、最初のPSPグラフィックバックエンド(sceGu)、操作、テクスチャマネージャ、PSPビルドシステムの作者で、以降の作業はすべてこれを土台にしています。
 - **z2442** — PSP移植を継続(VFPUによる頂点変換とクリッピング、Media Engine上のオーディオ)。本プロジェクトのベースとなるリポジトリの所有者です。
 - **demmis98** — z2442のリポジトリでのPSP最適化と修正。
-- **z2442のOcarina of Time移植(oot-PSP)とDaedalus** — TV出力の補助モジュール(`psp/dvemgr`)はOoT移植のものを取り入れており、それはN64エミュレータDaedalusのPSP向け映像出力方式に基づいています。
+- **z2442のOcarina of Time移植(oot-PSP)とDaedalus** — TV出力の補助モジュール(`psp/dvemgr`)はOoT移植のものを取り入れており、それはN64エミュレータDaedalusのPSP向け映像出力方式に基づいています。また、MEのデータを専用のキャッシュラインに置くというアイデア(`tools/psp/me_linkfile.py`)は、このOoT移植のMedia Engineレンダラーに由来します。
 - **ghurone / Sonic-R-PSP** — 頂点アリーナのキャッシュ、横方向クリッピングをGEに任せる発想、コンパイラフラグに関するヒントは、PSP向けSonic R移植に由来します。
 - **beckerd([psp_mk64_portable](https://github.com/beckerd/psp_mk64_portable))と JustKidding23([Ocarina-of-Time-PSP](https://github.com/JustKidding23/Ocarina-of-Time-PSP)、[z2442/oot-PSP](https://github.com/z2442/oot-PSP)ベース)** — ゲームデータを同梱せず、初回起動時にPSP上でプレイヤー自身のROMから生成するというアイデアは、これらの2つのPSP移植(マリオカート64とゼルダの伝説 時のオカリナ)に由来します。このリポジトリのインストーラー(`psp/installer/`)は別個の実装で、テンプレートとマニフェストから `SM64.PRX` を再構築します。
 - **sm64coopdx / sm64ex-coop** — マルチプレイの設計(同期、メニュー、通知、部屋の設定)の参考、およびこの移植に合わせて調整したキャラクター(ルイージ、キノピオ、ワルイージ、ワリオ)のアセット(モデルとテクスチャ、HUDの顔アイコン、サウンドバンク、ボイスサンプル)の出典。ボイスは同プロジェクトでAndrat氏(ルイージ、ワルイージにも使用)、Dark the Eagle氏(ワリオ)、Ninten_King_64氏(キノピオ)のクレジットとなっています。sm64coopdxはsm64ex-coop(djoslinと貢献者)とDynOS(PeachyPeach)を基にしています。これらのアセットはそれぞれの作者に帰属し、このプロジェクトのライセンスの対象外です。マルチプレイに必要なため同梱しています。sm64coopdxはこれらのライセンスを公開していません。作者の方で削除やクレジットの変更を希望される場合はissueを作成してください。

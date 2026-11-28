@@ -258,7 +258,21 @@ DATA_README = [
 ]
 
 
-def pack_release(repo, ver, langs, out_dir, installer):
+GO_PAUSE_README = """== English ==
+EXPERIMENTAL, only for the PSP Go: lets you use the Go's "Pause Game" (PS button > Pause Game) with this game.
+Copy this EBOOT.PBP over the one in PSP/GAME/{folder}/ (after installing the game as usual).
+The game then runs in the normal 24 MB of memory instead of the extra memory (the Go keeps the paused game there).
+Not tested on a real PSP Go. If anything goes wrong, put the normal EBOOT.PBP back. If the sound stutters after resuming, restart the game.
+
+== Español ==
+EXPERIMENTAL, solo para PSP Go: permite usar la "Pausa del juego" de la Go (botón PS > Pausar juego) con este juego.
+Copia este EBOOT.PBP encima del que está en PSP/GAME/{folder}/ (después de instalar el juego como siempre).
+Así el juego usa los 24 MB de memoria normales en vez de la memoria extra (la Go guarda ahí el juego en pausa).
+No se ha probado en una PSP Go real. Si algo falla, vuelve a poner el EBOOT.PBP normal. Si el sonido se entrecorta al reanudar, reinicia el juego.
+"""
+
+
+def pack_release(repo, ver, langs, out_dir, installer, go_pause=True):
     """Assemble <out_dir>/PSP/GAME/SM64_<VER>/ with the installer EBOOT, the template, the manifest and data/."""
     if installer is None:
         subprocess.check_call(["make", "-C", os.path.join(repo, "psp", "installer"), "VERSION=" + ver])
@@ -273,6 +287,14 @@ def pack_release(repo, ver, langs, out_dir, installer):
     names = " + ".join(ROM_NAMES[l] for l in langs)
     with open(os.path.join(dst, "data", "README.txt"), "w", encoding="utf-8") as f:
         f.write("\n\n".join("== %s ==\n%s" % (lang, text.format(roms=names)) for lang, text in DATA_README) + "\n")
+    if go_pause:
+        # Experimental: the same installer EBOOT without MEMSIZE=1, for the PSP Go's "Pause Game" (see GO_PAUSE_README)
+        subprocess.check_call(["make", "-C", os.path.join(repo, "psp", "installer"), "VERSION=" + ver, "PSP_GO_PAUSE=1"])
+        go_dir = os.path.join(out_dir, "PSP_GO_PAUSE_EXPERIMENTAL")
+        os.makedirs(go_dir, exist_ok=True)
+        shutil.copyfile(os.path.join(repo, "build", ver + "_psp", "installer_go_pause", "EBOOT.PBP"), os.path.join(go_dir, "EBOOT.PBP"))
+        with open(os.path.join(go_dir, "README.txt"), "w", encoding="utf-8") as f:
+            f.write(GO_PAUSE_README.format(folder="SM64_" + ver.upper()))
     return dst
 
 
